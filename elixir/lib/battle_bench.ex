@@ -23,7 +23,8 @@ defmodule BattleBench do
           players: :integer,
           ticks: :integer,
           workload: :string,
-          alloc: :string
+          alloc: :string,
+          player_store: :string
         ]
       )
 
@@ -41,6 +42,7 @@ defmodule BattleBench do
         ticks = Keyword.get(opts, :ticks, 200)
         workload = Keyword.get(opts, :workload, "medium")
         alloc_s = Keyword.get(opts, :alloc, "naive")
+        player_store_s = Keyword.get(opts, :player_store, "tuple")
 
         cond do
           rooms < 1 or players < 2 or ticks < 1 ->
@@ -48,7 +50,8 @@ defmodule BattleBench do
 
           true ->
             with {:ok, cmod} <- Sim.cast_mod(workload),
-                 {:ok, alloc} <- Sim.parse_alloc(alloc_s) do
+                 {:ok, alloc} <- Sim.parse_alloc(alloc_s),
+                 {:ok, sim} <- parse_player_store(player_store_s) do
               {:ok,
                %{
                  seed: seed,
@@ -58,18 +61,31 @@ defmodule BattleBench do
                  workload: workload,
                  alloc: alloc,
                  alloc_s: alloc_s,
+                 player_store: player_store_s,
+                 sim: sim,
                  cmod: cmod
                }}
             else
               :error ->
-                case Sim.cast_mod(workload) do
-                  :error -> {:error, "unknown workload #{inspect(workload)}"}
-                  _ -> {:error, "unknown alloc #{inspect(alloc_s)}"}
+                cond do
+                  Sim.cast_mod(workload) == :error ->
+                    {:error, "unknown workload #{inspect(workload)}"}
+
+                  Sim.parse_alloc(alloc_s) == :error ->
+                    {:error, "unknown alloc #{inspect(alloc_s)}"}
+
+                  true ->
+                    {:error, "unknown player store #{inspect(player_store_s)}"}
                 end
             end
         end
     end
   end
+
+  defp parse_player_store("tuple"), do: {:ok, BattleBench.Sim}
+  defp parse_player_store("list"), do: {:ok, BattleBench.SimList}
+  defp parse_player_store("map"), do: {:ok, BattleBench.SimMap}
+  defp parse_player_store(_), do: :error
 
   defp run(cfg) do
     {gc0, words0, _} = :erlang.statistics(:garbage_collection)
@@ -98,6 +114,7 @@ defmodule BattleBench do
     %{
       "lang" => "elixir",
       "alloc" => cfg.alloc_s,
+      "player_store" => cfg.player_store,
       "ticks" => cfg.ticks,
       "seed" => cfg.seed,
       "rooms" => cfg.rooms,
@@ -138,21 +155,22 @@ defmodule BattleBench do
   end
 
   defp simulate_room(cfg, room_id, start) do
-    room = Sim.new_room(cfg.seed, room_id, cfg.players, cfg.alloc)
-    skip_warmup = cfg.ticks > Sim.warmup_ticks()
-    interval = Sim.tick_budget_us()
+    sim = cfg.sim
+    room = sim.new_room(cfg.seed, room_id, cfg.players, cfg.alloc)
+    skip_warmup = cfg.ticks > sim.warmup_ticks()
+    interval = sim.tick_budget_us()
 
     {room, lags, computes} =
       Enum.reduce(0..(cfg.ticks - 1), {room, [], []}, fn t, {room, lags, computes} ->
         due = start + t * interval
         wait_deadline(due)
         t0 = System.monotonic_time(:microsecond)
-        room = Sim.tick(room, cfg.cmod)
+        room = sim.tick(room, cfg.cmod)
         done = System.monotonic_time(:microsecond)
         lag = max(done - due, 0)
         compute = done - t0
 
-        if not skip_warmup or t >= Sim.warmup_ticks() do
+        if not skip_warmup or t >= sim.warmup_ticks() do
           {room, [lag | lags], [compute | computes]}
         else
           {room, lags, computes}
@@ -162,7 +180,7 @@ defmodule BattleBench do
     %{
       hash: room.hash,
       damage: room.damage_total,
-      alive: Sim.alive_count(room),
+      alive: sim.alive_count(room),
       lags: :lists.reverse(lags),
       computes: :lists.reverse(computes)
     }
@@ -203,7 +221,8 @@ defmodule BattleBench do
     Enum.at(sorted, idx)
   end
 
-  defp hex64(n), do: n |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(16, "0")
+  defp hex64(n),
+    do: n |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(16, "0")
 
   defp rss_bytes do
     {out, 0} = System.cmd("ps", ["-o", "rss=", "-p", System.pid()])
@@ -217,5 +236,6 @@ defmodule BattleBench do
     end
   end
 
-  defp arch_name, do: :erlang.system_info(:system_architecture) |> List.to_string() |> String.split("-") |> hd()
+  defp arch_name,
+    do: :erlang.system_info(:system_architecture) |> List.to_string() |> String.split("-") |> hd()
 end

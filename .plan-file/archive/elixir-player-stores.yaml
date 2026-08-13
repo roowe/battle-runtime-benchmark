@@ -1,0 +1,26 @@
+goal: 为 Elixir 战斗内核实现 tuple、list、map 三种玩家容器并公平比较性能
+phases:
+  - id: 1
+    content: 确定三种容器的公共接口和严格一致的数据顺序
+    status: done
+  - id: 2
+    content: 保留 tuple 基线并实现惯用的 list 与 map 战斗内核
+    status: done
+  - id: 3
+    content: 接入 player-store CLI、JSON 输出和专用矩阵脚本
+    status: done
+  - id: 4
+    content: 编译、对拍 hash 并执行小规模性能验证
+    status: done
+notes:
+  - content: tuple 基线模块 BattleBench.Sim 保持原样；新实现必须保持玩家 ID 遍历、命中和 hash 顺序一致。
+  - content: list 采用 Elixir list of Erlang records；map 采用 id 到 player map。实验比较整体建模方式，不隔离内部 player 表示。
+  - content: 多组 200/1000/2400 tick 内核对拍及 100 房 CLI 对拍均通过；100 房 200 tick high/arena 中 list 的 compute p99 为 2.10ms，tuple 为 2.38ms，map 为 2.19ms。
+errors:
+  - content: Mix 在 workspace sandbox 内无法通过 TCP 获取文件锁；经授权在 sandbox 外编译成功。
+    resolved: true
+  - content: uv 在 sandbox 内无法访问用户缓存；经授权在 sandbox 外完成 CLI 默认值和错误参数验证。
+    resolved: true
+  - content: 首次格式检查包含了要求保持不动且原本未格式化的 sim.ex；改为只检查本次修改文件后通过。
+    resolved: true
+summary: 已实现 tuple 基线、list of records、id-keyed map 三种 player store，接入 CLI 和比较脚本；编译、格式、参数校验、跨结构 hash 对拍及性能 smoke test均通过。
