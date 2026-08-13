@@ -1,0 +1,4 @@
+/rust/target/
+/go/battle
+/results/
+.DS_Store
