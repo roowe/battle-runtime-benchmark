@@ -5,11 +5,11 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 out_dir="$root/results"
 mkdir -p "$out_dir"
 only="${ONLY:-}"
-if [[ "$only" == "zig" ]]; then
-  out="$out_dir/matrix_zig.jsonl"
-else
-  out="$out_dir/matrix.jsonl"
-fi
+case "$only" in
+  zig) out="$out_dir/matrix_zig.jsonl" ;;
+  elixir) out="$out_dir/matrix_elixir.jsonl" ;;
+  *) out="$out_dir/matrix.jsonl" ;;
+esac
 : >"$out"
 
 if [[ -z "$only" || "$only" == "go" ]]; then
@@ -23,6 +23,9 @@ if [[ -z "$only" || "$only" == "zig" ]]; then
     zig build --build-file "$root/zig/build.zig" -Doptimize=ReleaseFast --prefix "$root/zig/zig-out"
   fi
 fi
+if [[ -z "$only" || "$only" == "elixir" ]]; then
+  (cd "$root/elixir" && MIX_ENV=prod mix escript.build >&2)
+fi
 
 seed=1234
 # 20Hz × 2 minutes
@@ -35,6 +38,7 @@ run() {
     go) bin="$root/go/battle" ;;
     rust) bin="$root/rust/target/release/battle-bench" ;;
     zig) bin="$root/zig/zig-out/bin/battle-bench" ;;
+    elixir) bin="$root/elixir/battle_bench" ;;
     *) printf 'unknown lang %s\n' "$lang" >&2; exit 1 ;;
   esac
   "$bin" --seed "$seed" --ticks "$ticks" --rooms "$rooms" --workload "$workload" --alloc "$alloc" \
@@ -85,6 +89,18 @@ rust naive 1000 high
 rust arena 1000 high
 zig naive 1000 high
 zig arena 1000 high
+elixir naive 100 medium
+elixir arena 100 medium
+elixir naive 100 high
+elixir arena 100 high
+elixir naive 500 medium
+elixir arena 500 medium
+elixir naive 500 high
+elixir arena 500 high
+elixir naive 1000 medium
+elixir arena 1000 medium
+elixir naive 1000 high
+elixir arena 1000 high
 CASES
 
 printf 'wrote %s\n' "$out" >&2

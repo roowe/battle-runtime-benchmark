@@ -2,5 +2,8 @@
 /go/battle
 /zig/.zig-cache/
 /zig/zig-out/
+/elixir/_build/
+/elixir/deps/
+/elixir/battle_bench
 /results/
 .DS_Store
