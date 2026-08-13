@@ -8,30 +8,26 @@ workload="${3:-medium}"
 
 go build -C "$root/go" -o battle .
 cargo build --quiet --release --manifest-path "$root/rust/Cargo.toml"
+zig build --build-file "$root/zig/build.zig" -Doptimize=ReleaseFast --prefix "$root/zig/zig-out"
 
-run_one() {
-  local lang="$1" alloc="$2"
-  if [[ "$lang" == "go" ]]; then
-    "$root/go/battle" --seed "$seed" --ticks "$ticks" --workload "$workload" --alloc "$alloc"
-  else
-    "$root/rust/target/release/battle-bench" --seed "$seed" --ticks "$ticks" --workload "$workload" --alloc "$alloc"
-  fi
-}
+python3 - "$root" "$seed" "$ticks" "$workload" <<'PY'
+import json, subprocess, sys
 
-python3 - "$seed" "$ticks" "$workload" "$(run_one go naive)" "$(run_one go arena)" "$(run_one rust naive)" "$(run_one rust arena)" <<'PY'
-import json, sys
-
-seed, ticks, workload = sys.argv[1], sys.argv[2], sys.argv[3]
-runs = {
-    "go naive": json.loads(sys.argv[4]),
-    "go arena": json.loads(sys.argv[5]),
-    "rust naive": json.loads(sys.argv[6]),
-    "rust arena": json.loads(sys.argv[7]),
+root, seed, ticks, workload = sys.argv[1:5]
+bins = {
+    "go naive": [f"{root}/go/battle", "--alloc", "naive"],
+    "go arena": [f"{root}/go/battle", "--alloc", "arena"],
+    "rust naive": [f"{root}/rust/target/release/battle-bench", "--alloc", "naive"],
+    "rust arena": [f"{root}/rust/target/release/battle-bench", "--alloc", "arena"],
+    "zig naive": [f"{root}/zig/zig-out/bin/battle-bench", "--alloc", "naive"],
+    "zig arena": [f"{root}/zig/zig-out/bin/battle-bench", "--alloc", "arena"],
 }
 keys = ("world_hash", "damage_total", "alive_players")
 ref = None
 ok = True
-for name, d in runs.items():
+for name, bin_cmd in bins.items():
+    cmd = bin_cmd + ["--seed", seed, "--ticks", ticks, "--workload", workload]
+    d = json.loads(subprocess.check_output(cmd))
     sig = tuple(d[k] for k in keys)
     print(f"{name:<12} hash={d['world_hash']} damage={d['damage_total']} alive={d['alive_players']}")
     if ref is None:
@@ -41,5 +37,5 @@ for name, d in runs.items():
         ok = False
 if not ok:
     sys.exit(1)
-print(f"OK: all four match  seed={seed} ticks={ticks} workload={workload}")
+print(f"OK: all six match  seed={seed} ticks={ticks} workload={workload}")
 PY

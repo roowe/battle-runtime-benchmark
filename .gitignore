@@ -1,4 +1,6 @@
 /rust/target/
 /go/battle
+/zig/.zig-cache/
+/zig/zig-out/
 /results/
 .DS_Store
