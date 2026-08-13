@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "$0")" && pwd)"
+JAVA_BIN="${JAVA_HOME:+$JAVA_HOME/bin/java}"
+if [[ -z "${JAVA_BIN}" || ! -x "${JAVA_BIN}" ]]; then
+  if [[ -x /opt/homebrew/opt/openjdk@25/bin/java ]]; then
+    JAVA_BIN=/opt/homebrew/opt/openjdk@25/bin/java
+  else
+    JAVA_BIN=java
+  fi
+fi
+exec "$JAVA_BIN" -cp "$root/out" battle.Main "$@"

@@ -8,6 +8,7 @@ only="${ONLY:-}"
 case "$only" in
   zig) out="$out_dir/long_zig.jsonl" ;;
   elixir) out="$out_dir/long_elixir.jsonl" ;;
+  java) out="$out_dir/long_java.jsonl" ;;
   *) out="$out_dir/long.jsonl" ;;
 esac
 : >"$out"
@@ -26,6 +27,9 @@ fi
 if [[ -z "$only" || "$only" == "elixir" ]]; then
   (cd "$root/elixir" && MIX_ENV=prod mix escript.build >&2)
 fi
+if [[ -z "$only" || "$only" == "java" ]]; then
+  "$root/java/build.sh" >&2
+fi
 
 seed=1234
 # 20Hz × 30 minutes
@@ -39,6 +43,7 @@ run() {
     rust) bin="$root/rust/target/release/battle-bench" ;;
     zig) bin="$root/zig/zig-out/bin/battle-bench" ;;
     elixir) bin="$root/elixir/battle_bench" ;;
+    java) bin="$root/java/battle_bench" ;;
     *) printf 'unknown lang %s\n' "$lang" >&2; exit 1 ;;
   esac
   "$bin" --seed "$seed" --ticks "$ticks" --rooms "$rooms" --workload "$workload" --alloc "$alloc" \
@@ -57,6 +62,7 @@ go arena 1000 high
 rust arena 1000 high
 zig arena 1000 high
 elixir arena 1000 high
+java arena 1000 high
 CASES
 
 printf 'wrote %s\n' "$out" >&2

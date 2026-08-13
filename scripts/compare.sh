@@ -10,6 +10,7 @@ go build -C "$root/go" -o battle .
 cargo build --quiet --release --manifest-path "$root/rust/Cargo.toml"
 zig build --build-file "$root/zig/build.zig" -Doptimize=ReleaseFast --prefix "$root/zig/zig-out"
 (cd "$root/elixir" && MIX_ENV=prod mix escript.build >&2)
+"$root/java/build.sh" >&2
 
 python3 - "$root" "$seed" "$ticks" "$workload" <<'PY'
 import json, subprocess, sys
@@ -24,6 +25,8 @@ bins = {
     "zig arena": [f"{root}/zig/zig-out/bin/battle-bench", "--alloc", "arena"],
     "elixir naive": [f"{root}/elixir/battle_bench", "--alloc", "naive"],
     "elixir arena": [f"{root}/elixir/battle_bench", "--alloc", "arena"],
+    "java naive": [f"{root}/java/battle_bench", "--alloc", "naive"],
+    "java arena": [f"{root}/java/battle_bench", "--alloc", "arena"],
 }
 keys = ("world_hash", "damage_total", "alive_players")
 ref = None
@@ -40,5 +43,5 @@ for name, bin_cmd in bins.items():
         ok = False
 if not ok:
     sys.exit(1)
-print(f"OK: all eight match  seed={seed} ticks={ticks} workload={workload}")
+print(f"OK: all ten match  seed={seed} ticks={ticks} workload={workload}")
 PY
