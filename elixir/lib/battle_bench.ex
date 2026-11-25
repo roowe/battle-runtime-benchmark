@@ -24,7 +24,8 @@ defmodule BattleBench do
           ticks: :integer,
           workload: :string,
           alloc: :string,
-          player_store: :string
+          player_store: :string,
+          live_probe: :boolean
         ]
       )
 
@@ -43,6 +44,7 @@ defmodule BattleBench do
         workload = Keyword.get(opts, :workload, "medium")
         alloc_s = Keyword.get(opts, :alloc, "naive")
         player_store_s = Keyword.get(opts, :player_store, "tuple")
+        live_probe = Keyword.get(opts, :live_probe, false)
 
         cond do
           rooms < 1 or players < 2 or ticks < 1 ->
@@ -62,6 +64,7 @@ defmodule BattleBench do
                  alloc: alloc,
                  alloc_s: alloc_s,
                  player_store: player_store_s,
+                 live_probe: live_probe,
                  sim: sim,
                  cmod: cmod
                }}
@@ -104,6 +107,10 @@ defmodule BattleBench do
     alive = Enum.reduce(outs, 0, fn o, a -> a + o.alive end)
     lags = Enum.flat_map(outs, & &1.lags)
     computes = Enum.flat_map(outs, & &1.computes)
+    live_rooms =
+      if cfg.live_probe do
+        Enum.reduce(outs, 0, fn o, acc -> acc + o.live_bytes end)
+      end
 
     {gc1, words1, _} = :erlang.statistics(:garbage_collection)
     {runtime1, _} = :erlang.statistics(:runtime)
@@ -135,6 +142,8 @@ defmodule BattleBench do
       "missed_100ms" => lag.missed100,
       "missed_200ms" => lag.missed200,
       "rss_peak_bytes" => rss_bytes(),
+      "live_probe" => cfg.live_probe,
+      "live_room_bytes" => live_rooms,
       "cpu_seconds" => (runtime1 - runtime0) / 1000,
       "alloc_bytes" => (words1 - words0) * word,
       "alloc_objects" => gc1 - gc0,
@@ -177,12 +186,20 @@ defmodule BattleBench do
         end
       end)
 
+    live_bytes =
+      if cfg.live_probe do
+        :erlang.garbage_collect()
+        {:memory, mem} = Process.info(self(), :memory)
+        mem
+      end
+
     %{
       hash: room.hash,
       damage: room.damage_total,
       alive: sim.alive_count(room),
       lags: :lists.reverse(lags),
-      computes: :lists.reverse(computes)
+      computes: :lists.reverse(computes),
+      live_bytes: live_bytes
     }
   end
 

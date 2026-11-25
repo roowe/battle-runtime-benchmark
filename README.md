@@ -1,6 +1,6 @@
 # battle-runtime-benchmark
 
-同一套确定性战斗核，对比 Go / Rust / Zig / Elixir / Java 在 **20Hz 战斗服** 上的到期滞后（deadline lag）。另有 z42 0.7.0 的附加实现，单独构建、单独跑，见 [`z42/`](z42/README.md)。
+同一套确定性战斗核，对比 Go / Rust / Zig / Elixir / Java 在 **20Hz 战斗服** 上的到期滞后（deadline lag）。附录包含 Skynet / Lua 的 actor 模型版本。z42 0.7.0 的附加实现单独构建、单独运行，见 [`z42/`](z42/README.md)。
 
 这不是「四种 GC 对比」。Go 有 tracing GC，Elixir 是按进程的 copying GC，Rust 和 Zig 默认是显式生命周期 / allocator。产品问题只有一句：
 
@@ -21,6 +21,7 @@
 | Zig | skynet 式 worker 池：N 个 OS worker + 全局就绪队列 + 1ms timer；一房间同一时刻只在一个 worker 上跑。不是绿线程。 |
 | Elixir | 1 BEAM process / 房间 |
 | Java | 1 虚拟线程 / 房间（JDK 21+） |
+| Skynet（附录） | 1 service（Lua coroutine）/ 房间，跑在 4–8 个 worker 线程上 |
 
 `--alloc naive|arena`：naive 给短对象走堆分配；arena 复用切片。Elixir 和 Java 没有真正的 arena，两条路径算的是同一套规则，对象仍然进 GC。
 
@@ -125,7 +126,18 @@ Go/Rust/Zig 的计算 p99 分不开（都是 15µs），差在 runtime 和调度
 | Zig 短矩阵 + 长跑 | [`archive/2026-08-13-zig-skynet/`](archive/2026-08-13-zig-skynet/) |
 | Elixir 短矩阵 + 长跑 | [`archive/2026-08-13-elixir-beam/`](archive/2026-08-13-elixir-beam/) |
 | Java 短矩阵 + 长跑 | [`archive/2026-08-13-java-loom/`](archive/2026-08-13-java-loom/) |
+| Skynet 短矩阵 + 1000 房 + 同机 Elixir 对照 | [`archive/2026-11-25-doubao-cloud/`](archive/2026-11-25-doubao-cloud/) |
 | 各目录说明（机器、工具链、摘要） | 同目录 `NOTES.md` |
 | 当场重跑的输出 | `results/`（不入库） |
 
 JSON 里 `metric` 为 `deadline_lag`，`tick_interval_us` 为 `50000`。读延迟用 `tick_p50_us` / `tick_p99_us` / `tick_max_us` / `missed_50ms`；读纯计算用 `compute_*`。
+
+## 附录：Skynet / Lua（2026-11-25，豆包云主机）
+
+不是五方对比的一部分：语言和调度模型都不同，只能单独读。
+
+- 4 vCPU 云主机，skynet `a2c00da` + Lua 5.5，1 房间 = 1 service（coroutine），默认 4 worker。
+- 600 tick、40 人、medium：1–100 房 0 次超 50ms，100 房 arena lag p99 8.9ms；计算 p50 96–110µs（Go 4–6µs）。
+- 1000 房：4 worker p99 82.4ms、12263 次超预算；8 worker p99 32.4ms、1177 次（0.2%），没有 >100ms。
+- 9 组 `world_hash` 与 Go 全部一致；细节和 Lua 64 位取模的坑见 [`skynet/README.md`](skynet/README.md) 和 [`skynet/NOTES.md`](skynet/NOTES.md)。
+- 同一台机器上补跑了仓库里的 Elixir（OTP 27 + Elixir 1.18.4，4 scheduler，Task/房）：100 房 lag p99 6.7ms / compute p99 5.15ms；1000 房 lag p99 984.8ms、94% 的 tick 超预算。同样是「一房一个执行单元」，Lua coroutine 的内核 compute p99 比 BEAM process 低约 32 倍（100 房），1000 房时 p99 差 12 倍。内存上 Elixir 的 live 房间状态只有 66MB（1000 房，GC 后进程堆求和），531MB RSS 里约 87% 是分配器保留、样本数组和共享代码。
